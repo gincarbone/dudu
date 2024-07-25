@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Monitoraggio Server e Servizi</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="https://smtpjs.com/v3/smtp.js"></script>
+    <style>
+        .status-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .status-green { background-color: #28a745; }
+        .status-yellow { background-color: #ffc107; }
+        .status-red { background-color: #dc3545; }
+        .password-container {
+            position: relative;
+        }
+        .password-container .fa-eye {
+            color: #666666;
+            position: absolute;
+            top: 75%;
+            right: 10px;
+            transform: translateY(-75%);
+            cursor: pointer;
+        }
+        .password-container .fa-eye-slash {
+            color: #666666;
+            position: absolute;
+            top: 75%;
+            right: 10px;
+            transform: translateY(-75%);
+            cursor: pointer;
+        }
+        .sidebar {
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 100;
+            padding: 48px 0 0;
+            background-color: #000; /* Nero */
+            color: #fff; /* Bianco */
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+        }
+        .sidebar .nav-link {
+            color: #fff;
+        }
+        .sidebar .nav-link.active {
+            color: #0099cc;
+        }
+        .sidebar .nav-link:hover {
+            color: #0099cc;
+        }
+        .sidebar .sidebar-header {
+            padding: 20px;
+            text-align: center;
+        }
+        .sidebar .sidebar-header img {
+            max-width: 50px;
+            margin-bottom: 10px;
+        }
+        .btn-primary {
+            background-color: #0099cc;
+            border-color: #0077cc; /* Azzurro chiaro */
+        }
+        .btn-margin {
+            margin-right: 5px;
+        }
+        /* Stile per il terminale popup */
+        .terminal-popup {
+            background-color: #000;
+            color: #ccc;
+            padding: 20px;
+            border-radius: 5px;
+            height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-dark sidebar">
+                <div class="position-sticky pt-1">
+                    <div class="sidebar-header">
+                        <img  src="{{ url_for('static', filename='images/logo.webp') }}" alt="Logo"> <!-- Aggiungi il percorso al tuo logo -->
+                        <h4>Dudù</h4>
+                    </div>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="servers-link" href="#servers" onclick="showSection('servers')">
+                                <i class="fas fa-server server-icon"></i>
+                                Server
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="services-link" href="#services" onclick="showSection('services')">
+                                <i class="fas fa-laptop-code"></i>
+                                Servizi Web
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="wiki-link" href="#wiki" onclick="showSection('wiki')">
+                                <i class="fas fa-code"></i>
+                                Wiki
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="settings-link" href="#settings" onclick="showSection('settings')">
+                                <i class="fas fa-cog"></i>
+                                Settings
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h2 class="h2">Dashboard Monitoraggio Server e Servizi</h2>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <button class="btn btn-sm btn-primary btn-margin" onclick="showAddModal()">Aggiungi Server/Servizio</button>
+                        <button class="btn btn-sm btn-secondary btn-margin" onclick="exportToJson()">Esporta JSON</button>
+                        <input type="file" id="importFile" style="display: none;" onchange="importFromJson(this)">
+                        <button class="btn btn-sm btn-secondary btn-margin" onclick="document.getElementById('importFile').click()">Importa JSON</button>
+                    </div>
+                </div>
+
+                <div id="servers" class="content-section">
+                    <div class="row" id="serversDashboard"></div>
+                </div>
+
+                <div id="services" class="content-section" style="display:none;">
+                    <div class="row" id="servicesDashboard"></div>
+                </div>
+
+                <div id="wiki" class="content-section" style="display:none;">
+                    <div class="row" id="wikiDashboard"></div>
+                </div>
+
+                <div id="settings" class="content-section" style="display: none;">
+                    <h4>Configurazione Email</h4>
+                    <form>
+                        <div class="mb-3">
+                            <label for="emailAddress" class="form-label">Indirizzo Email:</label>
+                            <input type="email" class="form-control" id="emailAddress" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="smtpServer" class="form-label">Server SMTP:</label>
+                            <input type="text" class="form-control" id="smtpServer" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="smtpPort" class="form-label">Porta SMTP:</label>
+                            <input type="number" class="form-control" id="smtpPort" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="smtpUser" class="form-label">Username SMTP:</label>
+                            <input type="text" class="form-control" id="smtpUser" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="smtpPassword" class="form-label">Password SMTP:</label>
+                            <input type="password" class="form-control" id="smtpPassword" required>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="saveEmailConfig()">Salva</button>
+                    </form>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+
+
+    <!-- Modal per aggiungere/modificare -->
+    <div class="modal fade" id="addModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Aggiungi Server/Servizio</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="itemForm">
+                        <input type="hidden" id="itemId">
+                        <div class="mb-3">
+                            <label for="itemName" class="form-label">Nome</label>
+                            <input type="text" class="form-control" id="itemName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="itemType" class="form-label">Tipo</label>
+                            <select class="form-select" id="itemType" required>
+                                <option value="server">Server</option>
+                                <option value="service">Servizio</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="itemUrl" class="form-label">URL</label>
+                            <input type="url" class="form-control" id="itemUrl" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="itemUsername" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="itemUsername">
+                        </div>
+                        <div class="mb-3 password-container">
+                            <label for="itemPassword" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="itemPassword">
+                            <i class="fas fa-eye" onclick="togglePasswordVisibility()"></i>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Chiudi</button>
+                    <button type="button" class="btn btn-primary" onclick="saveItem()">Salva</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Terminal Modal -->
+    <div class="modal fade" id="terminalModal" tabindex="-1" aria-labelledby="terminalModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="terminalModalLabel">Terminale SSH</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="terminal" class="terminal-popup"></div>
+                    <form id="sshForm" onsubmit="return sendSSHCommand(event)">
+                        <div class="mb-3">
+                            <label for="sshUsername" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="sshUsername" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sshPassword" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="sshPassword" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sshCommand" class="form-label">Comando</label>
+                            <input type="text" class="form-control" id="sshCommand" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Invia</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        let items = [];
+
+        function loadItems() {
+            const savedItems = localStorage.getItem('monitoringItems');
+            if (savedItems) {
+                items = JSON.parse(savedItems);
+                updateDashboard();
+            }
+        }
+
+        function saveItems() {
+            localStorage.setItem('monitoringItems', JSON.stringify(items));
+        }
+
+        function updateDashboard() {
+            const serversDashboard = document.getElementById('serversDashboard');
+            const servicesDashboard = document.getElementById('servicesDashboard');
+            serversDashboard.innerHTML = '';
+            servicesDashboard.innerHTML = '';
+
+            items.forEach(item => {
+                item.status = item.status || 'unknown'; // Inizializza lo stato
+
+                const col = document.createElement('div');
+                col.className = 'col-md-3 mb-3';
+                col.innerHTML = `
+                    <div class="card position-relative">
+                        <div class="card-body">
+                            <span class="status-indicator status-${item.status}"></span>
+                            <h5 class="card-title">
+                                ${item.type === 'server' ? '<i class="fas fa-server server-icon"></i>' : '<i class="fas fa-network-wired service-icon"></i>'}
+                                ${item.name}
+                            </h5>
+                            <p class="card-text">
+                                ${item.type === 'server' ? 'Server' : 'Servizio'}
+                            </p>
+                            <a id="${item.url}" href="${item.url}">${item.url}</a>
+                            <p style="font-size: 0.875em;">Username: ${item.username || 'N/A'}</p>
+                            <div class="d-flex justify-content-end">
+                                <button class="btn btn-sm btn-primary me-2" onclick="editItem(${item.id})"> <i class="fas fa-edit"></i>modifica</button>
+                                <button class="btn btn-sm btn-danger me-2" onclick="deleteItem(${item.id})"><i class="fas fa-trash"></i>elimina</button>
+                                <button class="btn btn-sm btn-dark me-2" onclick="openTerminal(${item.id})"> <i class="fas fa-code"></i>terminale</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                if (item.type === 'server') {
+                    serversDashboard.appendChild(col);
+                } else {
+                    servicesDashboard.appendChild(col);
+                }
+            });
+        }
+
+
+        function showSection(section) {
+            const sections = ['servers', 'services', 'wiki', 'settings'];
+            sections.forEach(sec => {
+                document.getElementById(sec).style.display = sec === section ? 'block' : 'none';
+            });
+
+            document.getElementById('servers-link').classList.toggle('active', section === 'servers');
+            document.getElementById('services-link').classList.toggle('active', section === 'services');
+            document.getElementById('wiki-link').classList.toggle('active', section === 'wiki');
+            document.getElementById('settings-link').classList.toggle('active', section === 'settings');
+        }
+
+        function showAddModal() {
+            document.getElementById('modalTitle').textContent = 'Aggiungi Server/Servizio';
+            document.getElementById('itemForm').reset();
+            document.getElementById('itemId').value = '';
+            new bootstrap.Modal(document.getElementById('addModal')).show();
+        }
+
+        function saveItem() {
+            const id = document.getElementById('itemId').value;
+            const name = document.getElementById('itemName').value;
+            const type = document.getElementById('itemType').value;
+            const url = document.getElementById('itemUrl').value;
+            const username = document.getElementById('itemUsername').value;
+            const password = document.getElementById('itemPassword').value;
+
+            if (id) {
+                // Modifica
+                const index = items.findIndex(item => item.id == id);
+                items[index] = { ...items[index], name, type, url, username, password };
+            } else {
+                // Aggiunta
+                const newId = items.length > 0 ? Math.max(...items.map(item => item.id)) + 1 : 1;
+                items.push({ id: newId, name, type, url, username, password });
+            }
+
+            updateDashboard();
+            saveItems();
+            bootstrap.Modal.getInstance(document.getElementById('addModal')).hide();
+        }
+
+        function editItem(id) {
+            const item = items.find(item => item.id == id);
+            document.getElementById('modalTitle').textContent = 'Modifica Server/Servizio';
+            document.getElementById('itemId').value = item.id;
+            document.getElementById('itemName').value = item.name;
+            document.getElementById('itemType').value = item.type;
+            document.getElementById('itemUrl').value = item.url;
+            document.getElementById('itemUsername').value = item.username || '';
+            document.getElementById('itemPassword').value = item.password || '';
+            new bootstrap.Modal(document.getElementById('addModal')).show();
+        }
+
+        function deleteItem(id) {
+            if (confirm('Sei sicuro di voler eliminare questo elemento?')) {
+                items = items.filter(item => item.id != id);
+                updateDashboard();
+                saveItems();
+            }
+        }
+
+        async function checkStatus() {
+            for (let item of items) {
+                try {
+                    if (item.type === 'server') {
+                        await pingServer(item);
+                    } else if (item.type === 'service') {
+                        await checkService(item);
+                    }
+                } catch (error) {
+                    console.error(`Errore durante il controllo di ${item.name}:`, error);
+                    item.status = 'red';
+                }
+            }
+            updateDashboard();
+            saveItems();
+        }
+
+
+        async function pingServer(server) {
+            const response = await fetch('http://localhost:5000/ping', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ host: server.url })
+            });
+            const data = await response.json();
+            server.status = data.status;
+        }
+
+        function telnetService(url, port, callback) {
+            exec(`telnet ${url} ${port}`, (error, stdout, stderr) => {
+                if (error) {
+                    callback(false);
+                } else {
+                    callback(true);
+                }
+            });
+        }
+
+        async function checkService(service) {
+            try {
+                const startTime = Date.now();
+                const response = await fetch(service.url, {
+                    mode: 'no-cors', // Prova a usare 'cors' invece di 'no-cors'
+                    credentials: 'include', // Aggiungi le credenziali se necessario
+                });
+                const endTime = Date.now();
+                const latency = endTime - startTime;
+
+                if (response.status === 0) {
+                    console.warn(`Servizio ${service.name} ha restituito uno stato 0. Questo potrebbe indicare problemi di CORS o di rete. URL: ${service.url}`);
+                    service.status = 'yellow';
+                    await checkServiceWithImage(service);
+                } else if (response.ok) {
+                    service.status = 'green';
+                } else if (response.status >= 400 && response.status < 500) {
+                    console.warn(`Servizio ${service.name} ha restituito uno stato giallo. Status: ${response.status}, URL: ${service.url}`);
+                    service.status = 'yellow';
+                    await checkServiceWithImage(service);
+                } else if (latency >= 100 && latency < 300) {
+                    console.warn(`Servizio ${service.name} ha restituito uno stato giallo a causa della latenza. Latenza: ${latency}ms, URL: ${service.url}`);
+                    service.status = 'yellow';
+                    await checkServiceWithImage(service);
+                } else {
+                    service.status = 'red';
+                    sendEmailNotification(service);
+                }
+            } catch (error) {
+                console.error(`Errore durante il controllo del servizio ${service.name}:`, error.message);
+                service.status = 'red';
+                sendEmailNotification(service);
+            }
+        }
+
+        function checkServiceWithImage(service) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => {
+                    service.status = 'green';
+                    resolve();
+                };
+                img.onerror = () => {
+                    service.status = 'red';
+                    reject();
+                };
+                img.src = service.url + '/favicon.ico'; // URL di un'immagine dal servizio
+            });
+        }
+
+
+        function sendEmailNotification(service) {
+            const emailConfig = getEmailConfig();
+            if (!emailConfig) {
+                console.error('Configurazione email non trovata.');
+                return;
+            }
+
+            Email.send({
+                Host: emailConfig.smtpServer,
+                Username: emailConfig.smtpUser,
+                Password: emailConfig.smtpPassword,
+                To: emailConfig.emailAddress,
+                From: emailConfig.smtpUser,
+                Subject: `Server Down: ${service.name}`,
+                Body: `Il servizio ${service.name} è down. URL: ${service.url}`
+            }).then(message => {
+                console.log('Email inviata con successo:', message);
+            }).catch(error => {
+                console.error('Errore nell\'invio dell\'email:', error);
+            });
+        }
+
+
+
+
+        function exportToJson() {
+            const itemsToSave = items.map(({ status, ...item }) => item);
+            const dataStr = JSON.stringify(itemsToSave, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+            const exportFileDefaultName = 'monitoring_items.json';
+
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+
+        function importFromJson(input) {
+            const file = input.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const content = e.target.result;
+                try {
+                    const importedItems = JSON.parse(content);
+                    items = importedItems;
+                    saveItems();
+                    updateDashboard();
+                    alert('Importazione completata con successo!');
+                } catch (error) {
+                    console.error('Errore durante l\'importazione:', error);
+                    alert('Errore durante l\'importazione. Verifica il file e riprova.');
+                }
+            };
+
+            reader.readAsText(file);
+        }
+
+        function togglePasswordVisibility() {
+            const passwordField = document.getElementById('itemPassword');
+            const eyeIcon = passwordField.nextElementSibling;
+
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+                eyeIcon.classList.remove('fa-eye');
+                eyeIcon.classList.add('fa-eye-slash');
+            } else {
+                passwordField.type = 'password';
+                eyeIcon.classList.remove('fa-eye-slash');
+                eyeIcon.classList.add('fa-eye');
+            }
+        }
+
+        function saveEmailConfig() {
+            const emailConfig = {
+                emailAddress: document.getElementById('emailAddress').value,
+                smtpServer: document.getElementById('smtpServer').value,
+                smtpPort: document.getElementById('smtpPort').value,
+                smtpUser: document.getElementById('smtpUser').value,
+                smtpPassword: document.getElementById('smtpPassword').value
+            };
+            localStorage.setItem('emailConfig', JSON.stringify(emailConfig));
+            alert('Configurazione email salvata con successo.');
+        }
+
+        function getEmailConfig() {
+            const emailConfig = localStorage.getItem('emailConfig');
+            return emailConfig ? JSON.parse(emailConfig) : null;
+        }
+
+
+
+        function openTerminal(id) {
+            const item = items.find(item => item.id == id);
+            const terminalModal = new bootstrap.Modal(document.getElementById('terminalModal'));
+            document.getElementById('sshForm').onsubmit = (event) => connectSSH(event, item);
+            terminalModal.show();
+        }
+
+        async function connectSSH(event, server) {
+            event.preventDefault();
+
+            const username = document.getElementById('sshUsername').value;
+            const password = document.getElementById('sshPassword').value;
+
+            const response = await fetch('http://localhost:5000/ssh', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ hostname: server.url, username, password })
+            });
+
+            const data = await response.json();
+            if (data.error) {
+                alert(`Errore: ${data.error}`);
+            } else {
+                const terminal = document.getElementById('terminal');
+                terminal.innerHTML = 'Connesso con successo. Inserisci un comando.\n';
+                document.getElementById('sshForm').onsubmit = (event) => sendSSHCommand(event, server);
+            }
+        }
+
+        async function sendSSHCommand(event, server) {
+            event.preventDefault();
+
+            const command = document.getElementById('sshCommand').value;
+
+            const response = await fetch('http://localhost:5000/ssh/command', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ hostname: server.url, command })
+            });
+
+            const data = await response.json();
+            const terminal = document.getElementById('terminal');
+            if (data.error) {
+                terminal.innerText += `Errore: ${data.error}\n`;
+            } else {
+                terminal.innerText += `${data.output}\n`;
+            }
+        }
+
+
+        // Esegui il controllo dello stato ogni 30 secondi
+        setInterval(checkStatus, 30000);
+
+        // Carica gli elementi all'avvio
+        loadItems();
+        // Esegui il primo controllo dello stato
+        checkStatus();
+    </script>
+</body>
+</html>
