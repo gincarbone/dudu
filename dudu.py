@@ -11,7 +11,7 @@ app = Flask(__name__)
 CORS(app)  # Abilita CORS per tutte le route
 
 
-clients = {}
+clients = {}  
 
 
 def ping_host(host):
